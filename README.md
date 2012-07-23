@@ -9,3 +9,5 @@ Coroutines in the same schedule share the stack , so you can create many corouti
 But switching context will copy the stack the coroutine used.
 
 Read source for detail.
+
+Chinese blog : http://blog.codingnow.com/2012/07/c_coroutine.html
