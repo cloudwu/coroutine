@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdint.h>
 
 #define STACK_SIZE (1024*1024)
 #define DEFAULT_COROUTINE 16
@@ -103,7 +104,9 @@ coroutine_new(struct schedule *S, coroutine_func func, void *ud) {
 }
 
 static void
-mainfunc(struct schedule *S) {
+mainfunc(uint32_t low32, uint32_t hi32) {
+	uintptr_t ptr = (uintptr_t)low32 | ((uintptr_t)hi32 << 32);
+	struct schedule *S = (struct schedule *)ptr;
 	int id = S->running;
 	struct coroutine *C = S->co[id];
 	C->func(S,C->ud);
@@ -129,7 +132,8 @@ coroutine_resume(struct schedule * S, int id) {
 		C->ctx.uc_link = &S->main;
 		S->running = id;
 		C->status = COROUTINE_RUNNING;
-		makecontext(&C->ctx, (void (*)(void)) mainfunc, 1, S);
+		uintptr_t ptr = (uintptr_t)S;
+		makecontext(&C->ctx, (void (*)(void)) mainfunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));
 		swapcontext(&S->main, &C->ctx);
 		break;
 	case COROUTINE_SUSPEND:
