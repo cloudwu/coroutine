@@ -82,7 +82,7 @@ coroutine_new(struct schedule *S, coroutine_func func, void *ud) {
 		int id = S->cap;
 		S->cap *= 2;
 		S->co = realloc(S->co, S->cap * 2 * sizeof(struct coroutine *));
-		memset(S->co + S->cap , 0 , sizeof(struct coroutine *) * 2);
+		memset(S->co + S->cap , 0 , sizeof(struct coroutine *) * S->cap);
 		S->co[S->cap] = co;
 		S->cap *= 2;
 		++S->nco;
