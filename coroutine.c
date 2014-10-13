@@ -92,6 +92,7 @@ coroutine_new(struct schedule *S, coroutine_func func, void *ud) {
 	if (S->nco >= S->cap) { //当实际指针数大于默认的时,再扩容一倍
 		int id = S->cap;		
 		S->co = realloc(S->co, S->cap * 2 * sizeof(struct coroutine *));
+		//注意memset起始位置S->co + S->cap,及大小 
 		memset(S->co + S->cap , 0 , sizeof(struct coroutine *) * S->cap);
 		
 		S->co[S->cap] = co; //存放当前co
@@ -183,7 +184,7 @@ _save_stack(struct coroutine *C, char *top) { //这玩意很妙
 	char dummy = 0;	
 	assert(top - &dummy <= STACK_SIZE);
 	
-	//因为堆栈是从高地址向低地址扩展的,所以在这,top是栈顶地址, top - &dummy 则能得到栈的大小
+	//因为堆栈是从高地址向低地址扩展的,所以在这,top是栈顶地址, top - &dummy 则能得到栈的实际大小
 	// 这里可以去回顾一下堆栈的基础知识. 看看它是怎么压栈的.
 	if (C->cap < top - &dummy) {
 		free(C->stack);	//如果C->stack为空时,执行free,并不是啥大事,不会报错的.
