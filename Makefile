@@ -1,10 +1,13 @@
-all : main
+all : test_coroutine test_multi_sched
 
-main : main.c coroutine.c
+test_coroutine: test_coroutine.c coroutine.c
 	gcc -g -Wall -o $@ $^
 
+test_multi_sched: test_multi_sched.c coroutine.c multi_sched.c
+	gcc -g -Wall -o $@ $^ -lpthread 
+
 check: 
-	./main
+	./test_coroutine 
 
 clean :
-	rm main
+	rm test_coroutine 
