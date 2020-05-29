@@ -8,15 +8,18 @@
 
 struct schedule;
 
-typedef void (*coroutine_func)(struct schedule *, void *ud);
+typedef struct schedule schedule_t;
 
-struct schedule * coroutine_open(void);
-void coroutine_close(struct schedule *);
 
-int coroutine_new(struct schedule *, coroutine_func, void *ud);
-void coroutine_resume(struct schedule *, int id);
-int coroutine_status(struct schedule *, int id);
-int coroutine_running(struct schedule *);
-void coroutine_yield(struct schedule *);
+typedef void (*coroutine_func)(schedule_t *, void *arg);
+
+struct schedule * create_schedule(void);
+void destroy_schedule(schedule_t *);
+
+int create_coroutine(schedule_t *, coroutine_func, void *ud);
+int coroutine_resume(schedule_t *);
+int coroutine_status(schedule_t *, int id);
+void *coroutine_running(schedule_t *);
+void coroutine_yield(schedule_t *);
 
 #endif

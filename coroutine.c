@@ -16,177 +16,197 @@
 #define DEFAULT_COROUTINE 16
 
 struct coroutine;
+typedef struct coroutine coroutine_t;
 
 struct schedule {
 	char stack[STACK_SIZE];
 	ucontext_t main;
-	int nco;
-	int cap;
-	int running;
-	struct coroutine **co;
+	int co_num;            // total coroutine number
+	coroutine_t *running;  // now running coroutine, only one
+	coroutine_t *wait_co;  // waiting coroutines list for run
+	coroutine_t *free_co;  // free coroutines list
 };
 
 struct coroutine {
 	coroutine_func func;
-	void *ud;
+	void *arg;
 	ucontext_t ctx;
-	struct schedule * sch;
+	schedule_t * sch;
 	ptrdiff_t cap;
 	ptrdiff_t size;
 	int status;
 	char *stack;
+    coroutine_t *next;  // coroutine list entry
 };
 
-struct coroutine * 
-_co_new(struct schedule *S , coroutine_func func, void *ud) {
-	struct coroutine * co = malloc(sizeof(*co));
+coroutine_t * 
+_new_co(schedule_t *s , coroutine_func func, void *arg) {
+	coroutine_t * co = malloc(sizeof(coroutine_t));
+    if (co == NULL)
+        return NULL;
+        
 	co->func = func;
-	co->ud = ud;
-	co->sch = S;
+	co->arg = arg;
+	co->sch = s;
 	co->cap = 0;
 	co->size = 0;
 	co->status = COROUTINE_READY;
 	co->stack = NULL;
+    
 	return co;
 }
 
 void
-_co_delete(struct coroutine *co) {
+_delete_co(coroutine_t *co) {
 	free(co->stack);
+    co->stack = NULL;
 	free(co);
 }
 
-struct schedule * 
-coroutine_open(void) {
-	struct schedule *S = malloc(sizeof(*S));
-	S->nco = 0;
-	S->cap = DEFAULT_COROUTINE;
-	S->running = -1;
-	S->co = malloc(sizeof(struct coroutine *) * S->cap);
-	memset(S->co, 0, sizeof(struct coroutine *) * S->cap);
-	return S;
+schedule_t *
+create_schedule(void) {
+	schedule_t *s = malloc(sizeof(schedule_t));
+    memset(s, 0, sizeof(schedule_t));
+	return s;
 }
 
-void 
-coroutine_close(struct schedule *S) {
-	int i;
-	for (i=0;i<S->cap;i++) {
-		struct coroutine * co = S->co[i];
-		if (co) {
-			_co_delete(co);
-		}
-	}
-	free(S->co);
-	S->co = NULL;
-	free(S);
+static inline void
+destroy_coroutines(coroutine_t *co) {
+    if (co == NULL)
+        return;
+
+    coroutine_t *next;
+
+    do {
+        next = co->next;
+        _delete_co(co);
+        co = next;
+    } while (next != NULL);
+}
+
+void
+destroy_schedule(schedule_t *s) {
+    destroy_coroutines(s->free_co);
+    s->free_co = NULL;
+    
+    destroy_coroutines(s->wait_co);
+    s->wait_co = NULL;
+    
+    destroy_coroutines(s->running);
+    s->running = NULL;
+    
+	free(s);
 }
 
 int 
-coroutine_new(struct schedule *S, coroutine_func func, void *ud) {
-	struct coroutine *co = _co_new(S, func , ud);
-	if (S->nco >= S->cap) {
-		int id = S->cap;
-		S->co = realloc(S->co, S->cap * 2 * sizeof(struct coroutine *));
-		memset(S->co + S->cap , 0 , sizeof(struct coroutine *) * S->cap);
-		S->co[S->cap] = co;
-		S->cap *= 2;
-		++S->nco;
-		return id;
-	} else {
-		int i;
-		for (i=0;i<S->cap;i++) {
-			int id = (i+S->nco) % S->cap;
-			if (S->co[id] == NULL) {
-				S->co[id] = co;
-				++S->nco;
-				return id;
-			}
-		}
+create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
+    coroutine_t *co;
+
+	if (s->free_co == NULL) { // new a coroutine
+        co = _new_co(s, func , arg);
+        if (co == NULL)
+            return -1;
+
+		++s->co_num;
+	} else { // get a free coroutine
+	    co = s->free_co;
+        s->free_co = co->next;
+        
+        co->func = func;
+        co->arg = arg;
+        co->status = COROUTINE_READY;
 	}
-	assert(0);
-	return -1;
+
+    co->next = s->wait_co;
+    s->wait_co = co;
+
+	return 0;
 }
 
 static void
 mainfunc(uint32_t low32, uint32_t hi32) {
 	uintptr_t ptr = (uintptr_t)low32 | ((uintptr_t)hi32 << 32);
-	struct schedule *S = (struct schedule *)ptr;
-	int id = S->running;
-	struct coroutine *C = S->co[id];
-	C->func(S,C->ud);
-	_co_delete(C);
-	S->co[id] = NULL;
-	--S->nco;
-	S->running = -1;
+	schedule_t *s = (schedule_t *)ptr;
+	coroutine_t *co = s->running;
+    
+	co->func(s, co->arg);
+    
+    co->next = s->free_co;
+    s->free_co = co;
+	s->running = NULL;
 }
 
-void 
-coroutine_resume(struct schedule * S, int id) {
-	assert(S->running == -1);
-	assert(id >=0 && id < S->cap);
-	struct coroutine *C = S->co[id];
-	if (C == NULL)
-		return;
-	int status = C->status;
+int 
+coroutine_resume(schedule_t *s) {
+	assert(s->running == NULL);
+	coroutine_t *co = s->wait_co;  // get a coroutine run
+	if (co == NULL)
+		return -1;
+    
+    s->wait_co = co->next;
+    s->running = co;
+    co->next = NULL;
+    
+	int status = co->status;
 	switch(status) {
-	case COROUTINE_READY:
-		getcontext(&C->ctx);
-		C->ctx.uc_stack.ss_sp = S->stack;
-		C->ctx.uc_stack.ss_size = STACK_SIZE;
-		C->ctx.uc_link = &S->main;
-		S->running = id;
-		C->status = COROUTINE_RUNNING;
-		uintptr_t ptr = (uintptr_t)S;
-		makecontext(&C->ctx, (void (*)(void)) mainfunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));
-		swapcontext(&S->main, &C->ctx);
-		break;
-	case COROUTINE_SUSPEND:
-		memcpy(S->stack + STACK_SIZE - C->size, C->stack, C->size);
-		S->running = id;
-		C->status = COROUTINE_RUNNING;
-		swapcontext(&S->main, &C->ctx);
-		break;
-	default:
-		assert(0);
+    	case COROUTINE_READY:
+    		getcontext(&co->ctx);
+    		co->ctx.uc_stack.ss_sp = s->stack;
+    		co->ctx.uc_stack.ss_size = STACK_SIZE;
+    		co->ctx.uc_link = &s->main;
+    		co->status = COROUTINE_RUNNING;
+    		uintptr_t ptr = (uintptr_t)s;
+    		makecontext(&co->ctx, (void (*)(void)) mainfunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));
+    		swapcontext(&s->main, &co->ctx);
+    		break;
+    	case COROUTINE_SUSPEND:
+    		memcpy(s->stack + STACK_SIZE - co->size, co->stack, co->size);
+    		co->status = COROUTINE_RUNNING;
+    		swapcontext(&s->main, &co->ctx);
+    		break;
+    	default:
+    		assert(0);
 	}
+
+    return 0;
 }
 
 static void
-_save_stack(struct coroutine *C, char *top) {
+_save_stack(coroutine_t *co, char *top) {
 	char dummy = 0;
 	assert(top - &dummy <= STACK_SIZE);
-	if (C->cap < top - &dummy) {
-		free(C->stack);
-		C->cap = top-&dummy;
-		C->stack = malloc(C->cap);
+	if (co->cap < top - &dummy) {
+		free(co->stack);
+		co->cap = top-&dummy;
+		co->stack = malloc(co->cap);
 	}
-	C->size = top - &dummy;
-	memcpy(C->stack, &dummy, C->size);
+	co->size = top - &dummy;
+	memcpy(co->stack, &dummy, co->size);
 }
 
 void
-coroutine_yield(struct schedule * S) {
-	int id = S->running;
-	assert(id >= 0);
-	struct coroutine * C = S->co[id];
-	assert((char *)&C > S->stack);
-	_save_stack(C,S->stack + STACK_SIZE);
-	C->status = COROUTINE_SUSPEND;
-	S->running = -1;
-	swapcontext(&C->ctx , &S->main);
+coroutine_yield(schedule_t *s) {
+	coroutine_t *co = s->running;
+	assert((char *)&co > s->stack);
+	_save_stack(co, s->stack + STACK_SIZE);
+	co->status = COROUTINE_SUSPEND;
+	s->running = NULL;
+
+    // add current co into wait list tail
+    coroutine_t *last_co = s->wait_co;
+    if (last_co == NULL) {
+        s->wait_co = co;
+    } else {
+        while (last_co->next != NULL)
+            last_co = last_co->next;
+        last_co->next = co;
+    }
+        
+	swapcontext(&co->ctx , &s->main);
 }
 
-int 
-coroutine_status(struct schedule * S, int id) {
-	assert(id>=0 && id < S->cap);
-	if (S->co[id] == NULL) {
-		return COROUTINE_DEAD;
-	}
-	return S->co[id]->status;
-}
-
-int 
-coroutine_running(struct schedule * S) {
-	return S->running;
+void * 
+coroutine_running(schedule_t * s) {
+	return s->running;
 }
 

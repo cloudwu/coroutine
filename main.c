@@ -1,41 +1,41 @@
 #include "coroutine.h"
 #include <stdio.h>
+#include <assert.h>
 
 struct args {
 	int n;
 };
 
 static void
-foo(struct schedule * S, void *ud) {
+foo(schedule_t *s, void *ud) {
 	struct args * arg = ud;
 	int start = arg->n;
 	int i;
 	for (i=0;i<5;i++) {
-		printf("coroutine %d : %d\n",coroutine_running(S) , start + i);
-		coroutine_yield(S);
+		printf("coroutine %p : %d\n",coroutine_running(s) , start + i);
+		coroutine_yield(s);
 	}
 }
 
 static void
-test(struct schedule *S) {
+test(schedule_t *s) {
 	struct args arg1 = { 0 };
 	struct args arg2 = { 100 };
 
-	int co1 = coroutine_new(S, foo, &arg1);
-	int co2 = coroutine_new(S, foo, &arg2);
+	assert(create_coroutine(s, foo, &arg1) == 0);
+	assert(create_coroutine(s, foo, &arg2) == 0);
+    
 	printf("main start\n");
-	while (coroutine_status(S,co1) && coroutine_status(S,co2)) {
-		coroutine_resume(S,co1);
-		coroutine_resume(S,co2);
+	while (coroutine_resume(s) == 0) {
 	} 
 	printf("main end\n");
 }
 
 int 
 main() {
-	struct schedule * S = coroutine_open();
-	test(S);
-	coroutine_close(S);
+	schedule_t *s = create_schedule();
+	test(s);
+	destroy_schedule(s);
 	
 	return 0;
 }
