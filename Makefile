@@ -1,4 +1,4 @@
-all : test_coroutine test_multi_sched
+all : test_coroutine
 
 test_coroutine: test_coroutine.c coroutine.c
 	gcc -g -Wall -o $@ $^
