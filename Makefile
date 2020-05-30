@@ -1,4 +1,4 @@
-all : test_coroutine
+all : test_coroutine test_multi_sched
 
 test_coroutine: test_coroutine.c coroutine.c
 	gcc -g -Wall -o $@ $^
@@ -10,4 +10,4 @@ check:
 	./test_coroutine 
 
 clean :
-	rm test_coroutine 
+	rm test_coroutine test_multi_sched

@@ -1,11 +1,11 @@
 #include "coroutine.h"
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
 #include <stdint.h>
-
 #include <pthread.h>
 #include <sched.h>
 
