@@ -1,4 +1,5 @@
 #include "coroutine.h"
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <sched.h>
+#include <unistd.h>
 
 typedef struct {
     schedule_t *sched;
@@ -18,19 +20,27 @@ typedef struct {
 
 #define MAX_SCHED_NUM 32
 sched_with_core_t g_sched_with_core[MAX_SCHED_NUM];
+unsigned int      g_sched_num = 0;
+int               g_running = 0;
 
 
-void *thread_fun(void *arg)
+void *
+sched_func(void *arg)
 {
     sched_with_core_t *sched_with_core = arg;
-    
-    while (coroutine_resume(sched_with_core->sched) == 0) {
-    } 
+
+    while (g_running) {
+        while (coroutine_resume(sched_with_core->sched) == 0) {
+        } 
+
+        // no coroutine
+        usleep(1000);
+    }
  
     return NULL;
 }
  
-pthread_t
+pthread_t 
 create_sched_with_core(int cpu_id, void *arg) {
     pthread_t tid;
     pthread_attr_t attr;
@@ -45,7 +55,7 @@ create_sched_with_core(int cpu_id, void *arg) {
         return -1;
     }
  
-    if (0 != pthread_create(&tid, &attr, thread_fun, arg))
+    if (0 != pthread_create(&tid, &attr, sched_func, arg))
     {
         return -2;
     }
@@ -54,8 +64,11 @@ create_sched_with_core(int cpu_id, void *arg) {
 }
 
  
-int
+int 
 create_multi_sched(int *cpu_id, int cpu_id_num) {
+    int num = 0;
+
+    g_running = 1;
     memset(g_sched_with_core, 0, sizeof(g_sched_with_core));
 
     int i;
@@ -71,22 +84,39 @@ create_multi_sched(int *cpu_id, int cpu_id_num) {
         assert(tid > 0);
         
         g_sched_with_core[i].tid = tid;
+        num++;
     }
 
-    return 0;
+    g_sched_num = num;
+
+    return num;
 }
 
-void destroy_multi_sched(void) {
+void 
+destroy_multi_sched(void) {
+    g_running = 0;
+    
     int i;
     for (i = 0; i < MAX_SCHED_NUM; i++) {
         if (g_sched_with_core[i].tid == 0)
             break;
 
-        destroy_schedule(g_sched_with_core[i].sched);
         pthread_join(g_sched_with_core[i].tid, NULL);
+        destroy_schedule(g_sched_with_core[i].sched);
         
         g_sched_with_core[i].sched = NULL;
         g_sched_with_core[i].tid = 0;
     }
 }
+
+unsigned int
+get_sched_num(void) {
+    return g_sched_num;
+}
+
+schedule_t *
+get_sched_by_id(unsigned int id) {
+    return g_sched_with_core[id].sched;
+}
+    
 

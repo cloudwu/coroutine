@@ -11,7 +11,7 @@ foo(schedule_t *s, void *ud) {
     struct args * arg = ud;
     int start = arg->n;
     int i;
-    for (i=0;i<5;i++) {
+    for (i = 0;i < 5;i++) {
         printf("coroutine %p : %d\n", coroutine_running(s), start + i);
         coroutine_yield(s);
     }

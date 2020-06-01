@@ -1,6 +1,10 @@
 #include "coroutine.h"
+#include "multi_sched.h"
+
 #include <stdio.h>
 #include <assert.h>
+#include <unistd.h>
+
 
 struct args {
     int n;
@@ -11,31 +15,40 @@ foo(schedule_t *s, void *ud) {
     struct args * arg = ud;
     int start = arg->n;
     int i;
-    for (i=0;i<5;i++) {
-        printf("coroutine %p : %d\n",coroutine_running(s) , start + i);
+    for (i = 0;i < 5;i++) {
+        printf("coroutine %p : %d\n", coroutine_running(s), start + i);
         coroutine_yield(s);
     }
 }
 
-static void
-test(schedule_t *s) {
-    struct args arg1 = { 0 };
-    struct args arg2 = { 100 };
-
-    assert(create_coroutine(s, foo, &arg1) == 0);
-    assert(create_coroutine(s, foo, &arg2) == 0);
-    
-    printf("main start\n");
-    while (coroutine_resume(s) == 0) {
-    } 
-    printf("main end\n");
-}
 
 int 
 main() {
-    schedule_t *s = create_schedule();
-    test(s);
-    destroy_schedule(s);
+    int cpu_id[] = {0, 0, 0};
+    int num = create_multi_sched(cpu_id, sizeof(cpu_id)/sizeof(cpu_id[0]));
+    assert(num > 0);
+    
+    struct args arg0 = { 0 };
+    struct args arg1 = { 100 };
+    struct args arg2 = { 200 };
+    struct args arg3 = { 300 };
+    struct args arg4 = { 400 };
+    struct args arg5 = { 500 };
+
+    assert(create_coroutine(get_sched_by_id(0), foo, &arg0) == 0);
+    assert(create_coroutine(get_sched_by_id(1), foo, &arg1) == 0);
+    assert(create_coroutine(get_sched_by_id(2), foo, &arg2) == 0);
+    assert(create_coroutine(get_sched_by_id(0), foo, &arg3) == 0);
+    assert(create_coroutine(get_sched_by_id(1), foo, &arg4) == 0);
+    assert(create_coroutine(get_sched_by_id(2), foo, &arg5) == 0);
+
+    int t = 5;
+    while (t--) {
+        printf("loop: %d\n", t);
+        sleep(1);
+    } 
+    
+    destroy_multi_sched();
     
     return 0;
 }

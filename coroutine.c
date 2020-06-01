@@ -1,4 +1,5 @@
 #include "coroutine.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -24,7 +25,6 @@ struct schedule {
     int co_num;            // total coroutine number
     coroutine_t *running;  // now running coroutine, only one
     coroutine_t *wait_co;  // waiting coroutines list for run
-    coroutine_t *free_co;  // free coroutines list
 };
 
 struct coroutine {
@@ -86,9 +86,6 @@ destroy_coroutines(coroutine_t *co) {
 
 void
 destroy_schedule(schedule_t *s) {
-    destroy_coroutines(s->free_co);
-    s->free_co = NULL;
-    
     destroy_coroutines(s->wait_co);
     s->wait_co = NULL;
     
@@ -102,20 +99,11 @@ int
 create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     coroutine_t *co;
 
-    if (s->free_co == NULL) { // new a coroutine
-        co = _new_co(s, func , arg);
-        if (co == NULL)
-            return -1;
+    co = _new_co(s, func , arg);
+    if (co == NULL)
+        return -1;
 
-        ++s->co_num;
-    } else { // get a free coroutine
-        co = s->free_co;
-        s->free_co = co->next;
-        
-        co->func = func;
-        co->arg = arg;
-        co->status = COROUTINE_READY;
-    }
+    ++s->co_num;
 
     co->next = s->wait_co;
     s->wait_co = co;
@@ -131,9 +119,8 @@ mainfunc(uint32_t low32, uint32_t hi32) {
     
     co->func(s, co->arg);
     
-    co->next = s->free_co;
-    s->free_co = co;
     s->running = NULL;
+    _delete_co(co);
 }
 
 int 
