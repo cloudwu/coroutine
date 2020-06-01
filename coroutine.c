@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #if __APPLE__ && __MACH__
     #include <sys/ucontext.h>
@@ -19,14 +20,6 @@
 struct coroutine;
 typedef struct coroutine coroutine_t;
 
-struct schedule {
-    char stack[STACK_SIZE];
-    ucontext_t main;
-    int co_num;            // total coroutine number
-    coroutine_t *running;  // now running coroutine, only one
-    coroutine_t *wait_co;  // waiting coroutines list for run
-};
-
 struct coroutine {
     coroutine_func func;
     void *arg;
@@ -39,19 +32,25 @@ struct coroutine {
     coroutine_t *next;  // coroutine list entry
 };
 
+struct schedule {
+    char stack[STACK_SIZE];
+    ucontext_t main;
+    int co_num;            // total coroutine number
+    coroutine_t *running;  // now running coroutine, only one
+    coroutine_t  wait_co;  // waiting coroutines list for run
+};
+
 coroutine_t * 
 _new_co(schedule_t *s , coroutine_func func, void *arg) {
-    coroutine_t * co = malloc(sizeof(coroutine_t));
+    coroutine_t *co = malloc(sizeof(coroutine_t));
     if (co == NULL)
         return NULL;
-        
+
+    memset(co, 0, sizeof(coroutine_t));
     co->func = func;
     co->arg = arg;
     co->sch = s;
-    co->cap = 0;
-    co->size = 0;
     co->status = COROUTINE_READY;
-    co->stack = NULL;
     
     return co;
 }
@@ -63,10 +62,25 @@ _delete_co(coroutine_t *co) {
     free(co);
 }
 
+static void
+wait_co(schedule_t *s, void *arg) {
+
+    // no 
+    usleep(1000);
+    coroutine_yield(s);
+}
+
 schedule_t *
 create_schedule(void) {
     schedule_t *s = malloc(sizeof(schedule_t));
     memset(s, 0, sizeof(schedule_t));
+
+    coroutine_t *co = &s->wait_co;
+    co->func = wait_co;
+    co->arg = NULL;
+    co->sch = s;
+    co->status = COROUTINE_READY;
+    
     return s;
 }
 
@@ -86,8 +100,7 @@ destroy_coroutines(coroutine_t *co) {
 
 void
 destroy_schedule(schedule_t *s) {
-    destroy_coroutines(s->wait_co);
-    s->wait_co = NULL;
+    destroy_coroutines(s->wait_co.next);
     
     destroy_coroutines(s->running);
     s->running = NULL;
@@ -103,10 +116,13 @@ create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     if (co == NULL)
         return -1;
 
-    ++s->co_num;
+    __sync_fetch_and_add(&s->co_num, 1);
 
-    co->next = s->wait_co;
-    s->wait_co = co;
+    while (1) {
+        co->next = s->wait_co.next;
+        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co.next)), co->next, co))
+            break;
+    }
 
     return 0;
 }
@@ -121,21 +137,26 @@ mainfunc(uint32_t low32, uint32_t hi32) {
     
     s->running = NULL;
     _delete_co(co);
+    __sync_fetch_and_sub(&s->co_num, 1);
 }
 
 int 
 coroutine_resume(schedule_t *s) {
     assert(s->running == NULL);
-    coroutine_t *co = s->wait_co;  // get a coroutine run
-    if (co == NULL)
-        return -1;
     
-    s->wait_co = co->next;
-    s->running = co;
+    coroutine_t *co;
+    while (1) {
+        co = s->wait_co.next;  // get a coroutine run
+        if (co == NULL)
+            return -1;
+        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co.next)), co, co->next))
+            break;
+    }
+    
     co->next = NULL;
+    s->running = co;
     
-    int status = co->status;
-    switch(status) {
+    switch(co->status) {
         case COROUTINE_READY:
             getcontext(&co->ctx);
             co->ctx.uc_stack.ss_sp = s->stack;
@@ -180,15 +201,15 @@ coroutine_yield(schedule_t *s) {
     s->running = NULL;
 
     // add current co into wait list tail
-    coroutine_t *last_co = s->wait_co;
-    if (last_co == NULL) {
-        s->wait_co = co;
-    } else {
+    coroutine_t *last_co;
+    while (1) {
+        last_co = &s->wait_co;
         while (last_co->next != NULL)
             last_co = last_co->next;
-        last_co->next = co;
+        if (__sync_bool_compare_and_swap(&(last_co->next), NULL, co))
+            break;
     }
-        
+
     swapcontext(&co->ctx , &s->main);
 }
 

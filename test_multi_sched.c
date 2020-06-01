@@ -28,12 +28,12 @@ main() {
     int num = create_multi_sched(cpu_id, sizeof(cpu_id)/sizeof(cpu_id[0]));
     assert(num > 0);
     
-    struct args arg0 = { 0 };
-    struct args arg1 = { 100 };
-    struct args arg2 = { 200 };
-    struct args arg3 = { 300 };
-    struct args arg4 = { 400 };
-    struct args arg5 = { 500 };
+    struct args arg0 = { 100 };
+    struct args arg1 = { 200 };
+    struct args arg2 = { 300 };
+    struct args arg3 = { 100 };
+    struct args arg4 = { 200 };
+    struct args arg5 = { 300 };
 
     assert(create_coroutine(get_sched_by_id(0), foo, &arg0) == 0);
     assert(create_coroutine(get_sched_by_id(1), foo, &arg1) == 0);
