@@ -14,34 +14,33 @@
     #include <ucontext.h>
 #endif 
 
-#define STACK_SIZE (1024*1024)
-#define DEFAULT_COROUTINE 16
+#define STACK_SIZE (1024 * 1024)
 
 struct coroutine;
 typedef struct coroutine coroutine_t;
 
 struct coroutine {
-    coroutine_func func;
-    void *arg;
-    ucontext_t ctx;
-    schedule_t * sch;
-    ptrdiff_t cap;
-    ptrdiff_t size;
-    int status;
-    char *stack;
-    coroutine_t *next;  // coroutine list entry
+    coroutine_func  func;
+    void           *arg;
+    ucontext_t      ctx;
+    schedule_t     *sch;
+    ptrdiff_t       cap;
+    ptrdiff_t       size;
+    int             status;
+    char           *stack;
+    coroutine_t    *next;  // coroutine list entry
 };
 
 struct schedule {
-    char stack[STACK_SIZE];
-    ucontext_t main;
-    int co_num;            // total coroutine number
+    char         stack[STACK_SIZE];
+    ucontext_t   main;
+    int          co_num;   // total coroutine number
     coroutine_t *running;  // now running coroutine, only one
     coroutine_t  wait_co;  // waiting coroutines list for run
 };
 
 coroutine_t * 
-_new_co(schedule_t *s , coroutine_func func, void *arg) {
+_new_co(schedule_t *s, coroutine_func func, void *arg) {
     coroutine_t *co = malloc(sizeof(coroutine_t));
     if (co == NULL)
         return NULL;
@@ -62,12 +61,13 @@ _delete_co(coroutine_t *co) {
     free(co);
 }
 
+// not in use yet
 static void
-wait_co(schedule_t *s, void *arg) {
+system_co_func(schedule_t *s, void *arg) {
 
     // no 
     usleep(1000);
-    coroutine_yield(s);
+    yield_coroutine(s);
 }
 
 schedule_t *
@@ -75,8 +75,9 @@ create_schedule(void) {
     schedule_t *s = malloc(sizeof(schedule_t));
     memset(s, 0, sizeof(schedule_t));
 
+    // init system co
     coroutine_t *co = &s->wait_co;
-    co->func = wait_co;
+    co->func = system_co_func;
     co->arg = NULL;
     co->sch = s;
     co->status = COROUTINE_READY;
@@ -141,7 +142,7 @@ mainfunc(uint32_t low32, uint32_t hi32) {
 }
 
 int 
-coroutine_resume(schedule_t *s) {
+resume_coroutine(schedule_t *s) {
     assert(s->running == NULL);
     
     coroutine_t *co;
@@ -193,7 +194,7 @@ _save_stack(coroutine_t *co, char *top) {
 }
 
 void
-coroutine_yield(schedule_t *s) {
+yield_coroutine(schedule_t *s) {
     coroutine_t *co = s->running;
     assert((char *)&co > s->stack);
     _save_stack(co, s->stack + STACK_SIZE);
@@ -214,7 +215,7 @@ coroutine_yield(schedule_t *s) {
 }
 
 void * 
-coroutine_running(schedule_t * s) {
+get_running_coroutine(schedule_t *s) {
     return s->running;
 }
 

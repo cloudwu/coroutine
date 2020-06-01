@@ -16,9 +16,8 @@ schedule_t *create_schedule(void);
 void  destroy_schedule(schedule_t *);
 
 int   create_coroutine(schedule_t *, coroutine_func, void *arg);
-int   coroutine_resume(schedule_t *);
-int   coroutine_status(schedule_t *, int id);
-void *coroutine_running(schedule_t *);
-void  coroutine_yield(schedule_t *);
+int   resume_coroutine(schedule_t *);
+void *get_running_coroutine(schedule_t *);
+void  yield_coroutine(schedule_t *);
 
 #endif

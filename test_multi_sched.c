@@ -16,8 +16,8 @@ foo(schedule_t *s, void *ud) {
     int start = arg->n;
     int i;
     for (i = 0;i < 5;i++) {
-        printf("coroutine %p : %d\n", coroutine_running(s), start + i);
-        coroutine_yield(s);
+        printf("coroutine %p : %d\n", get_running_coroutine(s), start + i);
+        yield_coroutine(s);
     }
 }
 

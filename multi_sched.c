@@ -23,14 +23,12 @@ sched_with_core_t g_sched_with_core[MAX_SCHED_NUM];
 unsigned int      g_sched_num = 0;
 int               g_running = 0;
 
-
 void *
-sched_func(void *arg)
-{
+sched_func(void *arg) {
     sched_with_core_t *sched_with_core = arg;
 
     while (g_running) {
-        while (coroutine_resume(sched_with_core->sched) == 0) {
+        while (resume_coroutine(sched_with_core->sched) == 0) {
         } 
 
         // no coroutine

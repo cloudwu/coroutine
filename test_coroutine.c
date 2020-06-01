@@ -12,8 +12,8 @@ foo(schedule_t *s, void *ud) {
     int start = arg->n;
     int i;
     for (i = 0;i < 5;i++) {
-        printf("coroutine %p : %d\n", coroutine_running(s), start + i);
-        coroutine_yield(s);
+        printf("coroutine %p : %d\n", get_running_coroutine(s), start + i);
+        yield_coroutine(s);
     }
 }
 
@@ -26,7 +26,7 @@ test(schedule_t *s) {
     assert(create_coroutine(s, foo, &arg2) == 0);
     
     printf("main start\n");
-    while (coroutine_resume(s) == 0) {
+    while (resume_coroutine(s) == 0) {
     } 
     printf("main end\n");
 }
