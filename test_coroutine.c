@@ -1,6 +1,7 @@
-#include "coroutine.h"
 #include <stdio.h>
 #include <assert.h>
+
+#include "coroutine.h"
 
 struct args {
     int n;
@@ -12,15 +13,19 @@ foo(schedule_t *s, void *ud) {
     int start = arg->n;
     int i;
     for (i = 0;i < 5;i++) {
-        printf("coroutine %p : %d\n", get_running_coroutine(s), start + i);
+        printf("sched %d: coroutine %p, %d\n", sched_self_id(), get_running_coroutine(s), start + i);
         yield_coroutine(s);
     }
 }
 
-static void
-test(schedule_t *s) {
-    struct args arg1 = { 0 };
-    struct args arg2 = { 100 };
+int 
+main() {
+    struct args arg1 = { 100 };
+    struct args arg2 = { 200 };
+
+    schedule_t *s = create_schedule();
+
+    set_thread_sched(s);
 
     assert(create_coroutine(s, foo, &arg1) == 0);
     assert(create_coroutine(s, foo, &arg2) == 0);
@@ -29,12 +34,7 @@ test(schedule_t *s) {
     while (resume_coroutine(s) == 0) {
     } 
     printf("main end\n");
-}
 
-int 
-main() {
-    schedule_t *s = create_schedule();
-    test(s);
     destroy_schedule(s);
     
     return 0;
