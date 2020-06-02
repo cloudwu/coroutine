@@ -23,9 +23,12 @@ sched_with_core_t g_sched_with_core[MAX_SCHED_NUM];
 unsigned int      g_sched_num = 0;
 int               g_running = 0;
 
+static __thread sched_with_core_t *g_sched_per_core;
+
 void *
 sched_func(void *arg) {
     sched_with_core_t *sched_with_core = arg;
+    g_sched_per_core = sched_with_core;
 
     while (g_running) {
         while (resume_coroutine(sched_with_core->sched) == 0) {
@@ -107,14 +110,18 @@ destroy_multi_sched(void) {
     }
 }
 
-unsigned int
+inline unsigned int
 get_sched_num(void) {
     return g_sched_num;
 }
 
-schedule_t *
+inline schedule_t *
 get_sched_by_id(unsigned int id) {
     return g_sched_with_core[id].sched;
 }
     
+inline int
+sched_self_id(void) {
+    return g_sched_per_core->id;
+}
 
