@@ -29,7 +29,7 @@ static void *foo1(void *ud) {
     struct args *arg = ud;
     int start = arg->n;
     int i;
-    for (i = 0;i < 5;i++) {
+    for (i = 0;i < 10;i++) {
         printf("foo1 sched %d co %u: sem1 up   %d\n", co_sched_self_id(), get_running_co_id(), start + i);
         co_sem_up(&arg->sem1);
         printf("foo1 sched %d co %u: sem0 down %d\n", co_sched_self_id(), get_running_co_id(), start + i);
