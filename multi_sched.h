@@ -3,14 +3,13 @@
 #ifndef __MULTI_SCHED_H__
 #define __MULTI_SCHED_H__
 
-struct schedule;
-
-typedef struct schedule schedule_t;
+#include "coroutine.h"
 
 int  create_multi_sched(int *cpu_id, int cpu_id_num);
 void destroy_multi_sched(void);
 
-inline schedule_t  *get_sched_by_id(unsigned int id);
+schedule_t  *get_sched_by_id(unsigned int id);
+int is_all_sched_co_finished(void);
 
 #endif
 

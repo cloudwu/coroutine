@@ -10,7 +10,7 @@
 #include <sched.h>
 #include <unistd.h>
 
-#include "coroutine.h"
+#include "multi_sched.h"
  
 typedef struct {
     schedule_t *sched;
@@ -22,13 +22,12 @@ typedef struct {
 sched_with_cpu_t g_sched_with_cpu[MAX_SCHED_NUM];
 int              g_running = 0;
 
-void *
-sched_func(void *arg) {
+void *sched_func(void *arg) {
     sched_with_cpu_t *sched_with_core = arg;
     set_thread_sched(sched_with_core->sched);
 
     while (g_running) {
-        while (resume_coroutine(sched_with_core->sched) == 0) {
+        while (co_resume() == 0) {
         } 
 
         // no coroutine
@@ -38,8 +37,7 @@ sched_func(void *arg) {
     return NULL;
 }
 
-pthread_t 
-create_sched_with_cpu(int cpu_id, void *arg) {
+pthread_t create_sched_with_cpu(int cpu_id, void *arg) {
     pthread_t tid;
     pthread_attr_t attr;
  
@@ -61,8 +59,7 @@ create_sched_with_cpu(int cpu_id, void *arg) {
     return tid;
 }
  
-int 
-create_multi_sched(int *cpu_id, int cpu_id_num) {
+int create_multi_sched(int *cpu_id, int cpu_id_num) {
     int num = 0;
 
     g_running = 1;
@@ -86,8 +83,7 @@ create_multi_sched(int *cpu_id, int cpu_id_num) {
     return num;
 }
 
-void 
-destroy_multi_sched(void) {
+void destroy_multi_sched(void) {
     g_running = 0;
     
     int i;
@@ -103,9 +99,18 @@ destroy_multi_sched(void) {
     }
 }
 
-inline schedule_t *
-get_sched_by_id(unsigned int id) {
+inline schedule_t *get_sched_by_id(unsigned int id) {
     return g_sched_with_cpu[id].sched;
+}
+
+inline int is_all_sched_co_finished(void) {
+    int i;
+    for (i = 0; i < get_sched_num(); i++) {
+        if (get_sched_co_num(get_sched_by_id(i)) != 0)
+            return 0;
+    }
+
+    return 1;
 }
     
 

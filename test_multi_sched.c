@@ -10,20 +10,20 @@ struct args {
     int n;
 };
 
-static void
-foo(schedule_t *s, void *ud) {
-    struct args * arg = ud;
+static void *foo(void *ud) {
+    struct args *arg = ud;
     int start = arg->n;
     int i;
     for (i = 0;i < 5;i++) {
-        printf("sched %d: coroutine %p, %d\n", sched_self_id(), get_running_coroutine(s), start + i);
-        yield_coroutine(s);
+        printf("sched %d: coroutine %p, %d\n", co_sched_self_id(), get_running_coroutine(), start + i);
+        co_yield();
     }
+    
+    return NULL;
 }
 
 
-int 
-main() {
+int main() {
     int cpu_id[] = {0, 0, 0};
     int num = create_multi_sched(cpu_id, sizeof(cpu_id)/sizeof(cpu_id[0]));
     assert(num > 0);

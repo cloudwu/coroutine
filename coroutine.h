@@ -1,5 +1,5 @@
-#ifndef C_COROUTINE_H
-#define C_COROUTINE_H
+#ifndef __COROUTINE_H__
+#define __COROUTINE_H__
 
 #define COROUTINE_DEAD 0
 #define COROUTINE_READY 1
@@ -9,28 +9,36 @@
 struct schedule;
 typedef struct schedule schedule_t;
 
+struct coroutine;
+typedef struct coroutine coroutine_t;
 
-typedef void (*coroutine_func)(schedule_t *, void *arg);
+typedef void *(*coroutine_func)(void *);
 
 schedule_t *create_schedule(void);
-void  destroy_schedule(schedule_t *);
+void        destroy_schedule(schedule_t *);
 
-int   create_coroutine(schedule_t *, coroutine_func, void *arg);
-int   resume_coroutine(schedule_t *);
-void  yield_coroutine(schedule_t *);
+int   create_coroutine(schedule_t *, coroutine_func, void *);
+int   co_resume(void);
+void  co_yield(void);
+int   co_create_coroutine(coroutine_func, void *);
 
-inline void *get_running_coroutine(schedule_t *);
-inline int   get_sched_num(void);
-inline void  set_thread_sched(schedule_t *sched);
-inline int   sched_self_id(void);
-inline schedule_t *sched_self(void);
+void  set_thread_sched(schedule_t *);
+int   get_sched_co_num(schedule_t *);
+void *get_running_coroutine(void);
+int   get_sched_num(void);
+int   co_sched_self_id(void);
+schedule_t *co_sched_self(void);
 
-struct co_sem;
+struct co_sem {
+    coroutine_t *co;
+    int          cnt;
+};
+
 typedef struct co_sem co_sem_t;
 
-void co_sem_init(co_sem_t *sem);
-void co_sem_up(co_sem_t *sem);
-void co_sem_down(co_sem_t *sem);
-void co_sem_destroy(co_sem_t *sem);
+int  co_sem_init(co_sem_t *);
+void co_sem_up(co_sem_t *);
+void co_sem_down(co_sem_t *);
+int  co_sem_destroy(co_sem_t *);
 
 #endif

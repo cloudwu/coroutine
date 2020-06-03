@@ -16,9 +16,6 @@
 
 #define STACK_SIZE (1024 * 1024)
 
-struct coroutine;
-typedef struct coroutine coroutine_t;
-
 struct coroutine {
     coroutine_func  func;
     void           *arg;
@@ -44,8 +41,7 @@ struct schedule {
 static __thread schedule_t *g_sched_per_thread;
 int g_sched_num = 0;
 
-coroutine_t * 
-_new_co(schedule_t *s, coroutine_func func, void *arg) {
+coroutine_t *_new_co(schedule_t *s, coroutine_func func, void *arg) {
     coroutine_t *co = malloc(sizeof(coroutine_t));
     if (co == NULL)
         return NULL;
@@ -59,24 +55,23 @@ _new_co(schedule_t *s, coroutine_func func, void *arg) {
     return co;
 }
 
-void
-_delete_co(coroutine_t *co) {
+void _delete_co(coroutine_t *co) {
     free(co->stack);
     co->stack = NULL;
     free(co);
 }
 
 // not in use yet
-static void
-system_co_func(schedule_t *s, void *arg) {
+static void *system_co_func(void *arg) {
 
     // no 
     usleep(1000);
-    yield_coroutine(s);
+    co_yield();
+
+    return NULL;
 }
 
-schedule_t *
-create_schedule(void) {
+schedule_t *create_schedule(void) {
     schedule_t *s = malloc(sizeof(schedule_t));
     memset(s, 0, sizeof(schedule_t));
     s->id = __sync_fetch_and_add(&g_sched_num, 1);
@@ -91,8 +86,7 @@ create_schedule(void) {
     return s;
 }
 
-static inline void
-destroy_coroutines(coroutine_t *co) {
+static inline void destroy_coroutines(coroutine_t *co) {
     if (co == NULL)
         return;
 
@@ -105,8 +99,7 @@ destroy_coroutines(coroutine_t *co) {
     } while (next != NULL);
 }
 
-void
-destroy_schedule(schedule_t *s) {
+void destroy_schedule(schedule_t *s) {
     destroy_coroutines(s->wait_co.next);
     
     destroy_coroutines(s->running);
@@ -115,11 +108,8 @@ destroy_schedule(schedule_t *s) {
     free(s);
 }
 
-int 
-create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
-    coroutine_t *co;
-
-    co = _new_co(s, func , arg);
+int create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
+    coroutine_t *co = _new_co(s, func , arg);
     if (co == NULL)
         return -1;
 
@@ -134,21 +124,26 @@ create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     return 0;
 }
 
-static void
-mainfunc(uint32_t low32, uint32_t hi32) {
+inline int co_create_coroutine(coroutine_func func, void *arg) {
+    schedule_t *s = co_sched_self();
+    return create_coroutine(s, func, arg);
+}
+
+static void mainfunc(uint32_t low32, uint32_t hi32) {
     uintptr_t ptr = (uintptr_t)low32 | ((uintptr_t)hi32 << 32);
     schedule_t *s = (schedule_t *)ptr;
     coroutine_t *co = s->running;
     
-    co->func(s, co->arg);
+    co->func(co->arg);
     
     s->running = NULL;
     _delete_co(co);
     __sync_fetch_and_sub(&s->co_num, 1);
 }
 
-int 
-resume_coroutine(schedule_t *s) {
+int co_resume(void) {
+    schedule_t *s = co_sched_self();
+
     assert(s->running == NULL);
     
     coroutine_t *co;
@@ -186,8 +181,7 @@ resume_coroutine(schedule_t *s) {
     return 0;
 }
 
-static void
-_save_stack(coroutine_t *co, char *top) {
+static void _save_stack(coroutine_t *co, char *top) {
     char dummy = 0;
     assert(top - &dummy <= STACK_SIZE);
     if (co->cap < top - &dummy) {
@@ -199,8 +193,8 @@ _save_stack(coroutine_t *co, char *top) {
     memcpy(co->stack, &dummy, co->size);
 }
 
-void
-yield_coroutine(schedule_t *s) {
+void co_yield(void) {
+    schedule_t *s = co_sched_self();
     coroutine_t *co = s->running;
     assert((char *)&co > s->stack);
     _save_stack(co, s->stack + STACK_SIZE);
@@ -220,44 +214,38 @@ yield_coroutine(schedule_t *s) {
     swapcontext(&co->ctx , &s->main);
 }
 
-inline void * 
-get_running_coroutine(schedule_t *s) {
-    return s->running;
+inline void *get_running_coroutine(void) {
+    return g_sched_per_thread->running;
 }
 
-inline int
-get_sched_num(void) {
+inline int get_sched_num(void) {
     return g_sched_num;
 }
 
-inline void
-set_thread_sched(schedule_t *sched) {
+inline int get_sched_co_num(schedule_t *sched) {
+    return sched->co_num;
+}
+
+inline void set_thread_sched(schedule_t *sched) {
     g_sched_per_thread = sched;
 }
 
-inline int
-sched_self_id(void) {
+inline int co_sched_self_id(void) {
     return g_sched_per_thread->id;
 }
     
-inline schedule_t *
-sched_self(void) {
+inline schedule_t *co_sched_self(void) {
     return g_sched_per_thread;
 }
 
 
-struct co_sem {
-    coroutine_t *co;
-    int          cnt;
-};
-
-void
-co_sem_init(co_sem_t *sem) {
-    memset(sem, 0, sizeof(co_sem_t));
+int co_sem_init(co_sem_t *sem) {
+    sem->co = NULL;
+    sem->cnt = 0;
+    return 0;
 }
 
-void 
-co_sem_up(co_sem_t *sem) {
+void co_sem_up(co_sem_t *sem) {
     int cnt = __sync_fetch_and_add(&sem->cnt, 1);
     if (cnt >= 0) {
         // get a coroutine run
@@ -280,14 +268,13 @@ co_sem_up(co_sem_t *sem) {
     }
 }
 
-void
-co_sem_down(co_sem_t *sem) {
+void co_sem_down(co_sem_t *sem) {
     int cnt = __sync_fetch_and_sub(&sem->cnt, 1);
     if (cnt <= 0) {
         __sync_fetch_and_add(&sem->cnt, 1); // recover cnt
 
         // suspend current coroutine
-        schedule_t *s = sched_self();
+        schedule_t *s = co_sched_self();
         coroutine_t *co = s->running;
         assert((char *)&co > s->stack);
         _save_stack(co, s->stack + STACK_SIZE);
@@ -308,9 +295,8 @@ co_sem_down(co_sem_t *sem) {
     }
 }
 
-void
-co_sem_destroy(co_sem_t *sem) {
-
+int co_sem_destroy(co_sem_t *sem) {
+    return 0;
 }
     
 
