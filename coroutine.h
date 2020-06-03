@@ -24,10 +24,10 @@ int   co_create_coroutine(coroutine_func, void *);
 
 void  set_thread_sched(schedule_t *);
 int   get_sched_co_num(schedule_t *);
-void *get_running_coroutine(void);
 int   get_sched_num(void);
 int   co_sched_self_id(void);
 schedule_t *co_sched_self(void);
+unsigned int get_running_co_id(void);
 
 struct co_sem {
     coroutine_t *co;
@@ -36,7 +36,7 @@ struct co_sem {
 
 typedef struct co_sem co_sem_t;
 
-int  co_sem_init(co_sem_t *);
+int  co_sem_init(co_sem_t *, int);
 void co_sem_up(co_sem_t *);
 void co_sem_down(co_sem_t *);
 int  co_sem_destroy(co_sem_t *);

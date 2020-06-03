@@ -12,7 +12,7 @@ static void *foo(void *ud) {
     int start = arg->n;
     int i;
     for (i = 0;i < 5;i++) {
-        printf("sched %d: coroutine %p, %d\n", co_sched_self_id(), get_running_coroutine(), start + i);
+        printf("sched %d co %u: %d\n", co_sched_self_id(), get_running_co_id(), start + i);
         co_yield();
     }
 

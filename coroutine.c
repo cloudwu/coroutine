@@ -23,6 +23,7 @@ struct coroutine {
     schedule_t     *sched;
     ptrdiff_t       cap;
     ptrdiff_t       size;
+    unsigned int    id;
     int             status;
     char           *stack;
     coroutine_t    *next;  // coroutine list entry
@@ -33,6 +34,7 @@ struct schedule {
     ucontext_t   main;
     int          id;       // schedule id
     int          co_num;   // total coroutine number
+    unsigned int co_id;    // 
     coroutine_t *running;  // now running coroutine, only one
     coroutine_t  wait_co;  // waiting coroutines list for run
 };
@@ -113,6 +115,7 @@ int create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     if (co == NULL)
         return -1;
 
+    co->id = __sync_fetch_and_add(&s->co_id, 1);
     __sync_fetch_and_add(&s->co_num, 1);
 
     while (1) {
@@ -214,8 +217,12 @@ void co_yield(void) {
     swapcontext(&co->ctx , &s->main);
 }
 
-inline void *get_running_coroutine(void) {
+inline coroutine_t *get_running_coroutine(void) {
     return g_sched_per_thread->running;
+}
+
+inline unsigned int get_running_co_id(void) {
+    return get_running_coroutine()->id;
 }
 
 inline int get_sched_num(void) {
@@ -239,9 +246,9 @@ inline schedule_t *co_sched_self(void) {
 }
 
 
-int co_sem_init(co_sem_t *sem) {
+int co_sem_init(co_sem_t *sem, int cnt) {
     sem->co = NULL;
-    sem->cnt = 0;
+    sem->cnt = cnt;
     return 0;
 }
 
@@ -296,6 +303,9 @@ void co_sem_down(co_sem_t *sem) {
 }
 
 int co_sem_destroy(co_sem_t *sem) {
+    while (sem->co) {
+        usleep(1000);
+    }
     return 0;
 }
     
