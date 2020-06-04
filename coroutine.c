@@ -96,6 +96,47 @@ void destroy_schedule(schedule_t *s) {
     free(s);
 }
 
+// add co into list head
+static inline void insert_head(coroutine_t **list, coroutine_t *co) {
+    while (1) {
+        co->next = *list;
+        if (__sync_bool_compare_and_swap(list, co->next, co))
+            break;
+    }
+}
+
+// get list head co
+static inline coroutine_t *get_and_remove_head(coroutine_t **list) {
+    coroutine_t *co;
+    while (1) {
+        co = *list;
+        if (co == NULL)
+            return NULL;
+        if (__sync_bool_compare_and_swap(list, co, co->next))
+            break;
+    }
+    
+    co->next = NULL;
+    return co;
+}
+
+// add co into list tail
+static inline void insert_tail(coroutine_t **list, coroutine_t *co) {
+    coroutine_t *last_co;
+    while (1) {
+        last_co = *list;
+        if (last_co == NULL) {
+            if (__sync_bool_compare_and_swap(list, NULL, co))
+                break;
+        } else {
+            while (last_co->next != NULL)
+                last_co = last_co->next;
+            if (__sync_bool_compare_and_swap(&(last_co->next), NULL, co))
+                break;
+        }
+    }
+}
+
 int create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     coroutine_t *co = _new_co(s, func , arg);
     if (co == NULL)
@@ -104,11 +145,7 @@ int create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     co->id = __sync_fetch_and_add(&s->co_id, 1);
     __sync_fetch_and_add(&s->co_num, 1);
 
-    while (1) {
-        co->next = s->wait_co;
-        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co)), co->next, co))
-            break;
-    }
+    insert_head(&s->wait_co, co);
 
     return 0;
 }
@@ -134,15 +171,11 @@ int co_resume(void) {
     schedule_t *s = co_sched_self();
 
     assert(s->running == NULL);
-    
-    coroutine_t *co;
-    while (1) {
-        co = s->wait_co;  // get a coroutine run
-        if (co == NULL)
-            return -1;
-        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co)), co, co->next))
-            break;
-    }
+
+    // get a coroutine run
+    coroutine_t *co = get_and_remove_head(&s->wait_co);
+    if (co == NULL)
+        return -1;
     
     co->next = NULL;
     s->running = co;
@@ -191,19 +224,7 @@ void co_yield(void) {
     s->running = NULL;
 
     // add current co into wait list tail
-    coroutine_t *last_co;
-    while (1) {
-        last_co = s->wait_co;
-        if (last_co == NULL) {
-            if (__sync_bool_compare_and_swap(&(s->wait_co), NULL, co))
-                break;
-        } else {
-            while (last_co->next != NULL)
-                last_co = last_co->next;
-            if (__sync_bool_compare_and_swap(&(last_co->next), NULL, co))
-                break;
-        }
-    }
+    insert_tail(&s->wait_co, co);
 
     swapcontext(&co->ctx , &s->main);
 }
@@ -268,24 +289,14 @@ int coroutine_sem_up(co_sem_t *sem) {
     int cnt = __sync_fetch_and_add(&sem->cnt, 1);
     if (cnt >= 0) {
         // get a coroutine run
-        coroutine_t *co;
-        while (1) {
-            co = sem->co;
-            if (co == NULL)
-                return cnt;
-            if (__sync_bool_compare_and_swap((long *)(&(sem->co)), co, co->next))
-                break;
-        }
+        coroutine_t *co = get_and_remove_head(&sem->co);
+        if (co == NULL)
+            return cnt;
 
         __sync_fetch_and_sub(&sem->cnt, 1);
 
         // add the coroutine into wait list
-        schedule_t *s = co->sched;
-        while (1) {
-            co->next = s->wait_co;
-            if (__sync_bool_compare_and_swap((long *)(&(s->wait_co)), co->next, co))
-                break;
-        }
+        insert_head(&co->sched->wait_co, co);
     }
 
     return cnt;
@@ -307,14 +318,7 @@ int coroutine_sem_down(co_sem_t *sem, const char *func, int line) {
         s->running = NULL;
 
         // add current co into sem list head
-        coroutine_t *head_co;
-        while (1) {
-            head_co = sem->co;
-            if (__sync_bool_compare_and_swap(&(sem->co), head_co, co))
-                break;
-        }
-
-        co->next = head_co;
+        insert_head(&sem->co, co);
 
         swapcontext(&co->ctx , &s->main);
     }
