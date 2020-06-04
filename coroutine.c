@@ -24,6 +24,8 @@ struct coroutine {
     ptrdiff_t       cap;
     ptrdiff_t       size;
     unsigned int    id;
+    const char     *sem_down_func;
+    int             sem_down_line;
     int             status;
     char           *stack;
     coroutine_t    *next;  // coroutine list entry
@@ -40,7 +42,7 @@ struct schedule {
 };
 
 // one thread can create only one schedule
-static __thread schedule_t *g_sched_per_thread;
+__thread schedule_t *g_sched_per_thread;
 int g_sched_num = 0;
 
 coroutine_t *_new_co(schedule_t *s, coroutine_func func, void *arg) {
@@ -65,7 +67,8 @@ void _delete_co(coroutine_t *co) {
 
 // not in use yet
 static void *system_co_func(void *arg) {
-
+    arg = arg;
+    
     // no 
     usleep(1000);
     co_yield();
@@ -246,13 +249,34 @@ inline schedule_t *co_sched_self(void) {
 }
 
 
+#include <semaphore.h>
+co_sem_t g_co_sem_list;      // for debug
+sem_t    g_co_sem_list_lock; // for debug
+
+void init_co_sem_system(void) {
+    sem_init(&g_co_sem_list_lock, 0, 1);
+    
+    memset(&g_co_sem_list, 0, sizeof(g_co_sem_list));
+    g_co_sem_list.next = &g_co_sem_list;
+    g_co_sem_list.prev = &g_co_sem_list;
+}
+
 int co_sem_init(co_sem_t *sem, int cnt) {
     sem->co = NULL;
     sem->cnt = cnt;
+    
+    sem_wait(&g_co_sem_list_lock);
+    sem->next = &g_co_sem_list;
+    sem->prev = g_co_sem_list.prev;
+    g_co_sem_list.prev->next = sem;
+    g_co_sem_list.prev = sem;
+    g_co_sem_list.cnt++;
+    sem_post(&g_co_sem_list_lock);
+    
     return 0;
 }
 
-void co_sem_up(co_sem_t *sem) {
+int coroutine_sem_up(co_sem_t *sem) {
     int cnt = __sync_fetch_and_add(&sem->cnt, 1);
     if (cnt >= 0) {
         // get a coroutine run
@@ -260,10 +284,12 @@ void co_sem_up(co_sem_t *sem) {
         while (1) {
             co = sem->co;
             if (co == NULL)
-                return;
+                return cnt;
             if (__sync_bool_compare_and_swap((long *)(&(sem->co)), co, co->next))
                 break;
         }
+
+        __sync_fetch_and_sub(&sem->cnt, 1);
 
         // add the coroutine into wait list
         schedule_t *s = co->sched;
@@ -273,9 +299,11 @@ void co_sem_up(co_sem_t *sem) {
                 break;
         }
     }
+
+    return cnt;
 }
 
-void co_sem_down(co_sem_t *sem) {
+int coroutine_sem_down(co_sem_t *sem, const char *func, int line) {
     int cnt = __sync_fetch_and_sub(&sem->cnt, 1);
     if (cnt <= 0) {
         __sync_fetch_and_add(&sem->cnt, 1); // recover cnt
@@ -286,6 +314,8 @@ void co_sem_down(co_sem_t *sem) {
         assert((char *)&co > s->stack);
         _save_stack(co, s->stack + STACK_SIZE);
         co->status = COROUTINE_SUSPEND;
+        co->sem_down_func = func;
+        co->sem_down_line = line;
         s->running = NULL;
 
         // add current co into sem list head
@@ -300,13 +330,43 @@ void co_sem_down(co_sem_t *sem) {
 
         swapcontext(&co->ctx , &s->main);
     }
+
+    return cnt;
 }
 
 int co_sem_destroy(co_sem_t *sem) {
     while (sem->co) {
         usleep(1000);
     }
+
+    sem_wait(&g_co_sem_list_lock);
+    sem->prev->next = sem->next;
+    sem->next->prev = sem->prev;
+    g_co_sem_list.cnt--;
+    sem_post(&g_co_sem_list_lock);
+    
     return 0;
+}
+
+int print_all_co_sem(void) {
+    int cnt = 0;
+    
+    printf("print all co sem now\n");
+    sem_wait(&g_co_sem_list_lock);
+    co_sem_t *sem = g_co_sem_list.next;
+    while (sem != &g_co_sem_list) {
+        printf("sem: %p\n", sem);
+        coroutine_t *co = sem->co;
+        while (co != NULL) {
+            printf("sem: %p, co: %p, func: %s, line: %d\n", sem, co, co->sem_down_func, co->sem_down_line);
+            cnt++;
+            co = co->next;
+        }
+        sem = sem->next;
+    }
+    sem_post(&g_co_sem_list_lock);
+
+    return cnt;
 }
     
 

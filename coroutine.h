@@ -30,15 +30,24 @@ schedule_t *co_sched_self(void);
 unsigned int get_running_co_id(void);
 
 struct co_sem {
-    coroutine_t *co;
-    int          cnt;
+    int            cnt;
+    coroutine_t   *co;
+    struct co_sem *prev;
+    struct co_sem *next;
 };
 
 typedef struct co_sem co_sem_t;
 
-int  co_sem_init(co_sem_t *, int);
-void co_sem_up(co_sem_t *);
-void co_sem_down(co_sem_t *);
-int  co_sem_destroy(co_sem_t *);
+int  coroutine_sem_up(co_sem_t *);
+int  coroutine_sem_down(co_sem_t *sem, const char *func, int line);
+int  print_all_co_sem(void);
+
+void init_co_sem_system(void);
+
+int     co_sem_init(co_sem_t *, int);
+#define co_sem_up(sem)   coroutine_sem_up((sem));
+#define co_sem_down(sem) coroutine_sem_down((sem), __func__, __LINE__);
+int     co_sem_destroy(co_sem_t *);
+
 
 #endif
