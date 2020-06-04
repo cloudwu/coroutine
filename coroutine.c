@@ -38,7 +38,7 @@ struct schedule {
     int          co_num;   // total coroutine number
     unsigned int co_id;    // 
     coroutine_t *running;  // now running coroutine, only one
-    coroutine_t  wait_co;  // waiting coroutines list for run
+    coroutine_t *wait_co;  // waiting coroutines list for run
 };
 
 // one thread can create only one schedule
@@ -65,29 +65,11 @@ void _delete_co(coroutine_t *co) {
     free(co);
 }
 
-// not in use yet
-static void *system_co_func(void *arg) {
-    arg = arg;
-    
-    // no 
-    usleep(1000);
-    co_yield();
-
-    return NULL;
-}
-
 schedule_t *create_schedule(void) {
     schedule_t *s = malloc(sizeof(schedule_t));
     memset(s, 0, sizeof(schedule_t));
     s->id = __sync_fetch_and_add(&g_sched_num, 1);
 
-    // init system co
-    coroutine_t *co = &s->wait_co;
-    co->func = system_co_func;
-    co->arg = NULL;
-    co->sched = s;
-    co->status = COROUTINE_READY;
-    
     return s;
 }
 
@@ -105,7 +87,8 @@ static inline void destroy_coroutines(coroutine_t *co) {
 }
 
 void destroy_schedule(schedule_t *s) {
-    destroy_coroutines(s->wait_co.next);
+    destroy_coroutines(s->wait_co);
+    s->wait_co = NULL;
     
     destroy_coroutines(s->running);
     s->running = NULL;
@@ -122,8 +105,8 @@ int create_coroutine(schedule_t *s, coroutine_func func, void *arg) {
     __sync_fetch_and_add(&s->co_num, 1);
 
     while (1) {
-        co->next = s->wait_co.next;
-        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co.next)), co->next, co))
+        co->next = s->wait_co;
+        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co)), co->next, co))
             break;
     }
 
@@ -154,10 +137,10 @@ int co_resume(void) {
     
     coroutine_t *co;
     while (1) {
-        co = s->wait_co.next;  // get a coroutine run
+        co = s->wait_co;  // get a coroutine run
         if (co == NULL)
             return -1;
-        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co.next)), co, co->next))
+        if (__sync_bool_compare_and_swap((long *)(&(s->wait_co)), co, co->next))
             break;
     }
     
@@ -210,11 +193,16 @@ void co_yield(void) {
     // add current co into wait list tail
     coroutine_t *last_co;
     while (1) {
-        last_co = &s->wait_co;
-        while (last_co->next != NULL)
-            last_co = last_co->next;
-        if (__sync_bool_compare_and_swap(&(last_co->next), NULL, co))
-            break;
+        last_co = s->wait_co;
+        if (last_co == NULL) {
+            if (__sync_bool_compare_and_swap(&(s->wait_co), NULL, co))
+                break;
+        } else {
+            while (last_co->next != NULL)
+                last_co = last_co->next;
+            if (__sync_bool_compare_and_swap(&(last_co->next), NULL, co))
+                break;
+        }
     }
 
     swapcontext(&co->ctx , &s->main);
@@ -294,8 +282,8 @@ int coroutine_sem_up(co_sem_t *sem) {
         // add the coroutine into wait list
         schedule_t *s = co->sched;
         while (1) {
-            co->next = s->wait_co.next;
-            if (__sync_bool_compare_and_swap((long *)(&(s->wait_co.next)), co->next, co))
+            co->next = s->wait_co;
+            if (__sync_bool_compare_and_swap((long *)(&(s->wait_co)), co->next, co))
                 break;
         }
     }

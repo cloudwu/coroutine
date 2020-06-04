@@ -41,7 +41,7 @@ int main() {
     assert(create_coroutine(get_sched_by_id(1), foo, &arg4) == 0);
     assert(create_coroutine(get_sched_by_id(2), foo, &arg5) == 0);
 
-    int t = 5;
+    int t = 2;
     while (t--) {
         printf("loop: %d\n", t);
         sleep(1);
