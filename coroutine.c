@@ -257,13 +257,30 @@ inline schedule_t *co_sched_self(void) {
     return g_sched_per_thread;
 }
 
+static inline void co_spin_lock_init(int *lock) {
+    *lock = 0;
+}
 
-#include <semaphore.h>
+static inline void co_spin_lock(int *lock) {
+    int orig;
+    while (1) {
+        orig = __sync_fetch_and_add(lock, 1);
+        if (orig == 0) {
+            return;
+        }
+        __sync_fetch_and_sub(lock, 1);
+    }
+}
+
+static inline void co_spin_unlock(int *lock) {
+    __sync_fetch_and_sub(lock, 1);
+}
+
 co_sem_t g_co_sem_list;      // for debug
-sem_t    g_co_sem_list_lock; // for debug
+int      g_co_sem_list_lock; // for debug
 
 void init_co_sem_system(void) {
-    sem_init(&g_co_sem_list_lock, 0, 1);
+    co_spin_lock_init(&g_co_sem_list_lock);
     
     memset(&g_co_sem_list, 0, sizeof(g_co_sem_list));
     g_co_sem_list.next = &g_co_sem_list;
@@ -274,13 +291,13 @@ int co_sem_init(co_sem_t *sem, int cnt) {
     sem->co = NULL;
     sem->cnt = cnt;
     
-    sem_wait(&g_co_sem_list_lock);
+    co_spin_lock(&g_co_sem_list_lock);
     sem->next = &g_co_sem_list;
     sem->prev = g_co_sem_list.prev;
     g_co_sem_list.prev->next = sem;
     g_co_sem_list.prev = sem;
     g_co_sem_list.cnt++;
-    sem_post(&g_co_sem_list_lock);
+    co_spin_unlock(&g_co_sem_list_lock);
     
     return 0;
 }
@@ -331,11 +348,11 @@ int co_sem_destroy(co_sem_t *sem) {
         usleep(1000);
     }
 
-    sem_wait(&g_co_sem_list_lock);
+    co_spin_lock(&g_co_sem_list_lock);
     sem->prev->next = sem->next;
     sem->next->prev = sem->prev;
     g_co_sem_list.cnt--;
-    sem_post(&g_co_sem_list_lock);
+    co_spin_unlock(&g_co_sem_list_lock);
     
     return 0;
 }
@@ -344,7 +361,7 @@ int print_all_co_sem(void) {
     int cnt = 0;
     
     printf("print all co sem now\n");
-    sem_wait(&g_co_sem_list_lock);
+    co_spin_lock(&g_co_sem_list_lock);
     co_sem_t *sem = g_co_sem_list.next;
     while (sem != &g_co_sem_list) {
         printf("sem: %p\n", sem);
@@ -356,9 +373,65 @@ int print_all_co_sem(void) {
         }
         sem = sem->next;
     }
-    sem_post(&g_co_sem_list_lock);
+    co_spin_unlock(&g_co_sem_list_lock);
 
     return cnt;
 }
+
+int co_barrier_init(co_barrier_t *barrier, unsigned num) {
+    barrier->cnt = 0;
+    barrier->num = num;
+    barrier->co = NULL;
+    co_spin_lock_init(&barrier->lock);
+    return 0;
+}
+
+int coroutine_barrier_wait(co_barrier_t *barrier, const char *func, int line) {
+    co_spin_lock(&barrier->lock);
+    if (++barrier->cnt == barrier->num) { // resume all co
+        coroutine_t *co;
+        int cnt = 0;
+        while (1) {
+            co = get_and_remove_head(&barrier->co);
+            if (co == NULL)
+                break;
+
+            // add the coroutine into wait list
+            insert_head(&co->sched->wait_co, co);
+            cnt++;
+        }
+
+        assert(cnt == barrier->cnt - 1);
+        barrier->cnt = 0; // for re-use
+        
+        co_spin_unlock(&barrier->lock);
+        
+        return 0;
+    }
+    
+    // suspend current coroutine
+    schedule_t *s = co_sched_self();
+    coroutine_t *co = s->running;
+    assert((char *)&co > s->stack);
+    _save_stack(co, s->stack + STACK_SIZE);
+    co->status = COROUTINE_SUSPEND;
+    co->sem_down_func = func;
+    co->sem_down_line = line;
+    s->running = NULL;
+
+    // add current co into sem list head
+    insert_head(&barrier->co, co);
+
+    co_spin_unlock(&barrier->lock);
+    
+    swapcontext(&co->ctx , &s->main);
+    
+    return 0;
+}
+
+int co_barrier_destroy(co_barrier_t *barrier) {
+    return 0;
+}
+
     
 

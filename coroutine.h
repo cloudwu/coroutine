@@ -29,6 +29,7 @@ int   co_sched_self_id(void);
 schedule_t *co_sched_self(void);
 unsigned int get_running_co_id(void);
 
+// semaphore API
 struct co_sem {
     int            cnt;
     coroutine_t   *co;
@@ -49,5 +50,19 @@ int     co_sem_init(co_sem_t *, int);
 #define co_sem_down(sem) coroutine_sem_down((sem), __func__, __LINE__);
 int     co_sem_destroy(co_sem_t *);
 
+// barrier API
+struct co_barrier {
+    int            cnt;
+    int            num;
+    int            lock;
+    coroutine_t   *co;
+};
+
+typedef struct co_barrier co_barrier_t;
+
+int co_barrier_init(co_barrier_t *barrier, unsigned count);
+int coroutine_barrier_wait(co_barrier_t *barrier, const char *func, int line);
+#define co_barrier_wait(barrier) coroutine_barrier_wait(barrier, __func__, __LINE__)
+int co_barrier_destroy(co_barrier_t *barrier);
 
 #endif
