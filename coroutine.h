@@ -1,40 +1,44 @@
 #ifndef __COROUTINE_H__
 #define __COROUTINE_H__
 
-#define COROUTINE_DEAD 0
-#define COROUTINE_READY 1
-#define COROUTINE_RUNNING 2
-#define COROUTINE_SUSPEND 3
+#define CO_DESC(str)  1
 
-struct schedule;
-typedef struct schedule schedule_t;
+struct co_scheduler;
+typedef struct co_scheduler co_scheduler_t;
 
-struct coroutine;
-typedef struct coroutine coroutine_t;
+struct co_coroutine;
+typedef struct co_coroutine co_coroutine_t;
 
-typedef void *(*coroutine_func)(void *);
+typedef void *(*co_func_t)(void *);
 
-schedule_t *create_schedule(void);
-void        destroy_schedule(schedule_t *);
+co_scheduler_t *co_create_scheduler(void);
+void            co_destroy_scheduler(co_scheduler_t *);
 
-int   create_coroutine(schedule_t *, coroutine_func, void *);
-int   co_resume(void);
-void  co_yield(void);
-int   co_create_coroutine(coroutine_func, void *);
+int  create_coroutine(co_scheduler_t *, co_func_t, void *);
+int  resume_coroutine(void);
+void yield_coroutine(const char *func, int line);
 
-void  set_thread_sched(schedule_t *);
-int   get_sched_co_num(schedule_t *);
-int   get_sched_num(void);
-int   co_sched_self_id(void);
-schedule_t *co_sched_self(void);
-unsigned int get_running_co_id(void);
+#define co_create(func, arg) create_coroutine(co_sched_self(), func, arg)
+#define co_yield()           yield_coroutine(__func__, __LINE__)
+#define co_resume()          resume_coroutine()
 
-// semaphore API
+void  co_set_sched(co_scheduler_t *);
+int   co_get_co_num(co_scheduler_t *);
+int   co_get_sched_num(void);
+
+co_scheduler_t *co_sched_self(void);
+int             co_sched_self_id(void);
+
+co_coroutine_t *co_self(void);
+int             co_self_id(void);
+
+#if CO_DESC("semaphore for coroutine")
+
 struct co_sem {
-    int            cnt;
-    coroutine_t   *co;
-    struct co_sem *prev;
-    struct co_sem *next;
+    int             cnt;
+    co_coroutine_t *co;
+    struct co_sem  *prev;
+    struct co_sem  *next;
 };
 
 typedef struct co_sem co_sem_t;
@@ -50,19 +54,25 @@ int     co_sem_init(co_sem_t *, int);
 #define co_sem_down(sem) coroutine_sem_down((sem), __func__, __LINE__);
 int     co_sem_destroy(co_sem_t *);
 
-// barrier API
+#endif
+
+#if CO_DESC("barrier for coroutine")
+
 struct co_barrier {
-    int            cnt;
-    int            num;
-    int            lock;
-    coroutine_t   *co;
+    int               cnt;
+    int               num;
+    int               lock;
+    co_coroutine_t   *co;
 };
 
 typedef struct co_barrier co_barrier_t;
 
-int co_barrier_init(co_barrier_t *barrier, unsigned count);
 int coroutine_barrier_wait(co_barrier_t *barrier, const char *func, int line);
+
+int     co_barrier_init(co_barrier_t *barrier, unsigned count);
+int     co_barrier_destroy(co_barrier_t *barrier);
 #define co_barrier_wait(barrier) coroutine_barrier_wait(barrier, __func__, __LINE__)
-int co_barrier_destroy(co_barrier_t *barrier);
+
+#endif
 
 #endif

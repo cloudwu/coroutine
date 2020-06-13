@@ -12,7 +12,7 @@ static void *foo(void *ud) {
     int start = arg->n;
     int i;
     for (i = 0;i < 5;i++) {
-        printf("sched %d co %u: %d\n", co_sched_self_id(), get_running_co_id(), start + i);
+        printf("sched %d co %u: %d\n", co_sched_self_id(), co_self_id(), start + i);
         co_yield();
     }
 
@@ -23,18 +23,18 @@ int main() {
     struct args arg1 = { 100 };
     struct args arg2 = { 200 };
 
-    schedule_t *s = create_schedule();
-    set_thread_sched(s);
+    co_scheduler_t *s = co_create_scheduler();
+    co_set_sched(s);
 
-    assert(co_create_coroutine(foo, &arg1) == 0);
-    assert(co_create_coroutine(foo, &arg2) == 0);
+    assert(co_create(foo, &arg1) == 0);
+    assert(co_create(foo, &arg2) == 0);
     
     printf("main start\n");
     while (co_resume() == 0) {
     } 
     printf("main end\n");
 
-    destroy_schedule(s);
+    co_destroy_scheduler(s);
     
     return 0;
 }
