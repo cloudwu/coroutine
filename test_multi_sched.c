@@ -41,11 +41,9 @@ int main() {
     assert(create_coroutine(co_get_sched_by_id(1), foo, &arg4) == 0);
     assert(create_coroutine(co_get_sched_by_id(2), foo, &arg5) == 0);
 
-    int t = 2;
-    while (t--) {
-        printf("loop: %d\n", t);
-        sleep(1);
-    } 
+    while (!co_is_all_finished()) {
+        usleep(1000);
+    }
     
     co_destroy_multi_sched();
     

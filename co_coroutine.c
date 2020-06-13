@@ -286,28 +286,9 @@ static inline void co_spin_unlock(int *lock) {
 
 #if CO_DESC("semaphore for coroutine")
 
-co_sem_t g_co_sem_list;      // for debug
-int      g_co_sem_list_lock; // for debug
-
-void init_co_sem_system(void) {
-    co_spin_lock_init(&g_co_sem_list_lock);
-    
-    memset(&g_co_sem_list, 0, sizeof(g_co_sem_list));
-    g_co_sem_list.next = &g_co_sem_list;
-    g_co_sem_list.prev = &g_co_sem_list;
-}
-
 int co_sem_init(co_sem_t *sem, int cnt) {
     sem->co = NULL;
     sem->cnt = cnt;
-    
-    co_spin_lock(&g_co_sem_list_lock);
-    sem->next = &g_co_sem_list;
-    sem->prev = g_co_sem_list.prev;
-    g_co_sem_list.prev->next = sem;
-    g_co_sem_list.prev = sem;
-    g_co_sem_list.cnt++;
-    co_spin_unlock(&g_co_sem_list_lock);
     
     return 0;
 }
@@ -350,34 +331,7 @@ int co_sem_destroy(co_sem_t *sem) {
         usleep(1000);
     }
 
-    co_spin_lock(&g_co_sem_list_lock);
-    sem->prev->next = sem->next;
-    sem->next->prev = sem->prev;
-    g_co_sem_list.cnt--;
-    co_spin_unlock(&g_co_sem_list_lock);
-    
     return 0;
-}
-
-int print_all_co_sem(void) {
-    int cnt = 0;
-    
-    printf("print all co sem now\n");
-    co_spin_lock(&g_co_sem_list_lock);
-    co_sem_t *sem = g_co_sem_list.next;
-    while (sem != &g_co_sem_list) {
-        printf("sem: %p\n", sem);
-        co_coroutine_t *co = sem->co;
-        while (co != NULL) {
-            printf("sem: %p, co: %p, func: %sched, line: %d\n", sem, co, co->suspend_func, co->suspend_line);
-            cnt++;
-            co = co->next;
-        }
-        sem = sem->next;
-    }
-    co_spin_unlock(&g_co_sem_list_lock);
-
-    return cnt;
 }
 
 #endif

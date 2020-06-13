@@ -18,7 +18,7 @@ typedef struct {
     int             cpu_id;
 } sched_with_cpu_t;
 
-#define MAX_SCHED_NUM 32
+#define MAX_SCHED_NUM 128
 sched_with_cpu_t g_sched_with_cpu[MAX_SCHED_NUM];
 int              g_running = 0;
 
@@ -37,7 +37,7 @@ void *sched_func(void *arg) {
     return NULL;
 }
 
-pthread_t create_sched_with_cpu(int cpu_id, void *arg) {
+pthread_t create_thread_with_cpu(int cpu_id, void *arg) {
     pthread_t tid;
     pthread_attr_t attr;
  
@@ -73,7 +73,7 @@ int co_create_multi_sched(int *sched_cpu, int sched_num) {
         g_sched_with_cpu[i].sched = sched;
         g_sched_with_cpu[i].cpu_id = sched_cpu[i];
         
-        pthread_t tid = create_sched_with_cpu(sched_cpu[i], &g_sched_with_cpu[i]);
+        pthread_t tid = create_thread_with_cpu(sched_cpu[i], &g_sched_with_cpu[i]);
         assert(tid > 0);
         
         g_sched_with_cpu[i].tid= tid;
@@ -88,9 +88,9 @@ void co_destroy_multi_sched(void) {
     
     int i;
     for (i = 0; i < MAX_SCHED_NUM; i++) {
-        if (g_sched_with_cpu[i].tid == 0)
+        if (g_sched_with_cpu[i].sched == NULL)
             break;
-
+        
         pthread_join(g_sched_with_cpu[i].tid, NULL);
         co_destroy_scheduler(g_sched_with_cpu[i].sched);
         
@@ -102,16 +102,18 @@ void co_destroy_multi_sched(void) {
 inline co_scheduler_t *co_get_sched_by_id(unsigned int id) {
     return g_sched_with_cpu[id].sched;
 }
-
-inline int is_all_co_finished(void) {
+    
+inline int co_is_all_finished(void) {
     int i;
-    for (i = 0; i < co_get_sched_num(); i++) {
+    for (i = 0; i < MAX_SCHED_NUM; i++) {
+        if (g_sched_with_cpu[i].sched == NULL)
+            break;
+        
         if (co_get_co_num(co_get_sched_by_id(i)) != 0)
             return 0;
     }
 
     return 1;
 }
-    
 
 

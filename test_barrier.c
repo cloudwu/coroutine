@@ -14,12 +14,11 @@ co_barrier_t g_barrier;
 static void *foo0(void *ud) {
     struct args *arg = ud;
     
-    printf("sched %d co %u: %d\n", co_sched_self_id(), co_self_id(), arg->n++);
-    sleep(1);
+    printf("sched %d co %u: %d barrier before\n", co_sched_self_id(), co_self_id(), arg->n++);
     co_barrier_wait(&g_barrier);
     //co_barrier_wait(&g_barrier);
     //co_barrier_wait(&g_barrier);
-    printf("sched %d co %u: %d\n", co_sched_self_id(), co_self_id(), arg->n++);
+    printf("sched %d co %u: %d barrier after\n", co_sched_self_id(), co_self_id(), arg->n++);
     
     
     return NULL;
@@ -28,12 +27,12 @@ static void *foo0(void *ud) {
 static void *foo1(void *ud) {
     struct args *arg = ud;
     
-    printf("sched %d co %u: %d\n", co_sched_self_id(), co_self_id(), arg->n++);
+    printf("sched %d co %u: %d barrier before\n", co_sched_self_id(), co_self_id(), arg->n++);
     sleep(2);
     co_barrier_wait(&g_barrier);
     //co_barrier_wait(&g_barrier);
     //co_barrier_wait(&g_barrier);
-    printf("sched %d co %u: %d\n", co_sched_self_id(), co_self_id(), arg->n++);
+    printf("sched %d co %u: %d barrier after\n", co_sched_self_id(), co_self_id(), arg->n++);
     
     
     return NULL;
@@ -57,12 +56,10 @@ int main() {
     assert(create_coroutine(co_get_sched_by_id(0), foo1, &arg2) == 0);
     assert(create_coroutine(co_get_sched_by_id(1), foo0, &arg3) == 0);
 
-    int t = 5;
-    while (t--) {
-        printf("loop: %d\n", t);
-        sleep(1);
-    } 
-
+    while (!co_is_all_finished()) {
+        usleep(1000);
+    }
+    
     co_barrier_destroy(&g_barrier);
 
     co_destroy_multi_sched();

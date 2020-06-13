@@ -37,17 +37,12 @@ int             co_self_id(void);
 struct co_sem {
     int             cnt;
     co_coroutine_t *co;
-    struct co_sem  *prev;
-    struct co_sem  *next;
 };
 
 typedef struct co_sem co_sem_t;
 
 int  coroutine_sem_up(co_sem_t *);
 int  coroutine_sem_down(co_sem_t *sem, const char *func, int line);
-int  print_all_co_sem(void);
-
-void init_co_sem_system(void);
 
 int     co_sem_init(co_sem_t *, int);
 #define co_sem_up(sem)   coroutine_sem_up((sem));

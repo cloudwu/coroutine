@@ -42,8 +42,6 @@ static void *foo1(void *ud) {
 }
 
 int main() {
-    init_co_sem_system();
-    
     int sched_cpu[] = {0, 0};
     int num = co_create_multi_sched(sched_cpu, sizeof(sched_cpu)/sizeof(sched_cpu[0]));
     assert(num > 0);
@@ -59,25 +57,24 @@ int main() {
     co_sem_init(&arg2.sem0, 0);
     co_sem_init(&arg2.sem1, 0);
     
-    print_all_co_sem();
-
     // the same sem: on different coroutines, but on the same sched 0
     printf("test 1\n");
     assert(create_coroutine(co_get_sched_by_id(0), foo0, &arg0) == 0);
     assert(create_coroutine(co_get_sched_by_id(0), foo1, &arg0) == 0);
-    sleep(1);
     
     // the same sem: on different coroutines, but on the same sched 1
     printf("test 2\n");
     assert(create_coroutine(co_get_sched_by_id(1), foo0, &arg1) == 0);
     assert(create_coroutine(co_get_sched_by_id(1), foo1, &arg1) == 0);
-    sleep(1);
     
     // the same sem: on different coroutines, and on the different sched
     printf("test 3\n");
     assert(create_coroutine(co_get_sched_by_id(0), foo0, &arg2) == 0);
     assert(create_coroutine(co_get_sched_by_id(1), foo1, &arg2) == 0);
-    sleep(1);
+    
+    while (!co_is_all_finished()) {
+        usleep(1000);
+    }
     
     co_sem_destroy(&arg0.sem0);
     co_sem_destroy(&arg0.sem1);
@@ -86,8 +83,6 @@ int main() {
     co_sem_destroy(&arg2.sem0);
     co_sem_destroy(&arg2.sem1);
     
-    print_all_co_sem();
-
     co_destroy_multi_sched();
     
     return 0;
