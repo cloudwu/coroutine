@@ -10,7 +10,7 @@
 #include <sched.h>
 #include <unistd.h>
 
-#include "multi_sched.h"
+#include "co_multi_sched.h"
  
 typedef struct {
     co_scheduler_t *sched;

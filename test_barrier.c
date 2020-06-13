@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <unistd.h>
 
-#include "multi_sched.h"
+#include "co_multi_sched.h"
 
 
 struct args {

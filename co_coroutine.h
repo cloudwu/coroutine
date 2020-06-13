@@ -1,5 +1,5 @@
-#ifndef __COROUTINE_H__
-#define __COROUTINE_H__
+#ifndef __CO_COROUTINE_H__
+#define __CO_COROUTINE_H__
 
 #define CO_DESC(str)  1
 

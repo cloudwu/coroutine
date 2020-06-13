@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "coroutine.h"
+#include "co_coroutine.h"
 
 struct args {
     int n;
