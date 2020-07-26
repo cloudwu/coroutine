@@ -270,13 +270,10 @@ static inline void co_spin_lock_init(int *lock) {
 }
 
 static inline void co_spin_lock(int *lock) {
-    int orig;
     while (1) {
-        orig = __sync_fetch_and_add(lock, 1);
-        if (orig == 0) {
+        if (__sync_bool_compare_and_swap(lock, 0, 1) == 0) {
             return;
         }
-        __sync_fetch_and_sub(lock, 1);
     }
 }
 
