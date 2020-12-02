@@ -32,6 +32,24 @@ int             co_sched_self_id(void);
 co_coroutine_t *co_self(void);
 int             co_self_id(void);
 
+typedef int co_spin_t;
+
+static inline void co_spin_lock_init(co_spin_t *lock) {
+    *lock = 0;
+}
+
+static inline void co_spin_lock(co_spin_t *lock) {
+    while (1) {
+        if (__sync_bool_compare_and_swap(lock, 0, 1) == 0) {
+            return;
+        }
+    }
+}
+
+static inline void co_spin_unlock(co_spin_t *lock) {
+    __sync_fetch_and_sub(lock, 1);
+}
+
 #if CO_DESC("semaphore for coroutine")
 
 struct co_sem {
@@ -56,7 +74,7 @@ int     co_sem_destroy(co_sem_t *);
 struct co_barrier {
     int               cnt;
     int               num;
-    int               lock;
+    co_spin_t         lock;
     co_coroutine_t   *co;
 };
 

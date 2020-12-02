@@ -265,22 +265,6 @@ inline int co_self_id(void) {
     return co_self()->id;
 }
 
-static inline void co_spin_lock_init(int *lock) {
-    *lock = 0;
-}
-
-static inline void co_spin_lock(int *lock) {
-    while (1) {
-        if (__sync_bool_compare_and_swap(lock, 0, 1) == 0) {
-            return;
-        }
-    }
-}
-
-static inline void co_spin_unlock(int *lock) {
-    __sync_fetch_and_sub(lock, 1);
-}
-
 #if CO_DESC("semaphore for coroutine")
 
 int co_sem_init(co_sem_t *sem, int cnt) {
