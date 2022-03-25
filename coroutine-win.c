@@ -22,7 +22,7 @@ struct coroutine {
     void *ud;
     void *fiber_ctx;
     struct schedule * sch;
-    size_t sch_index;
+    int index;
     int status;
 };
 
@@ -43,20 +43,20 @@ void _co_delete(struct coroutine *co) {
 void __stdcall fiber_func(void *p) {
     struct coroutine * co = (struct coroutine *) p;
     struct schedule *sch = (struct schedule *)co->sch;
-    size_t id = co->sch_index;
-    assert( (0 <= id) && (id < sch->cap) );
+    int index = co->index;
+    assert( (0 <= index) && (index < sch->cap) );
     co->func(sch, co->ud);
     co->status = COROUTINE_DEAD; // Just mark it dead, can't delete it.
     sch->running = -1;
     SwitchToFiber(sch->fiber_ctx);
 }
 
-struct coroutine * _co_new(struct schedule *sch, size_t index, coroutine_func func, void *ud) {
+struct coroutine * _co_new(struct schedule *sch, int index, coroutine_func func, void *ud) {
     struct coroutine * co = (struct coroutine *) calloc(1, sizeof(*co));
     co->func = func;
     co->ud = ud;
     co->sch = sch;
-    co->sch_index = index;
+    co->index = index;
     co->status = COROUTINE_READY;
     co->fiber_ctx = CreateFiber(0, fiber_func, co);
     return co;
