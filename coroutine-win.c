@@ -34,7 +34,6 @@ int generate_id(struct schedule *sch) {
 
 struct coroutine * get_coroutine_from_id(struct schedule *sch, int id) {
     int index;
-    struct coroutine *co;
     for (index = 0; index < sch->cap; ++index) {
         struct coroutine *co = sch->co[index];
         if (co && co->unique_id == id) {
