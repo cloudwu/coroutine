@@ -6,9 +6,9 @@
 #include <string.h>
 #include <stdint.h>
 
-#if defined(__unix__) || defined(__APPLE__)
+#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
 
-#if __APPLE__ && __MACH__
+#if defined(__APPLE__) && defined(__MACH__)
 #define _XOPEN_SOURCE 600
 #endif
 #include <ucontext.h>
@@ -191,4 +191,4 @@ coroutine_running(struct schedule * S) {
 	return S->running;
 }
 
-#endif /* defined(__unix__) || defined(__APPLE__) */
+#endif /* defined(__unix__) || (defined(__APPLE__) && defined(__MACH__)) */
